@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ANIMA MERGE: 魂の塊</title>
+    <style>
+        body {
+            background-color: #0b0b0b;
+            color: #d4c5b9;
+            font-family: 'Times New Roman', serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden;
+        }
+
+        h1 {
+            color: #8a1a1a;
+            letter-spacing: 4px;
+            margin-bottom: 5px;
+            text-shadow: 0 0 10px rgba(138, 26, 26, 0.7);
+        }
+
+        .subtitle {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 20px;
+        }
+
+        #game-container {
+            background-color: #151515;
+            border: 2px solid #3a322d;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            width: 360px;
+            text-align: center;
+        }
+
+        .battle-area {
+            background: linear-gradient(to bottom, #1a0f0f, #151515);
+            border: 1px solid #5a2a2a;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .hp-bar-bg {
+            background-color: #333;
+            width: 100%;
+            height: 12px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .hp-bar {
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        #boss-hp { background-color: #8a1a1a; width: 100%; }
+        #player-hp { background-color: #2a7a3e; width: 100%; }
+
+        /* 4x4 マージグリッド */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            background-color: #221c18;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .cell {
+            width: 70px;
+            height: 70px;
+            background-color: #151210;
+            border: 1px solid #3a322d;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            cursor: pointer;
+            user-select: none;
+            transition: background-color 0.2s, transform 0.1s;
+            position: relative;
+        }
+
+        .cell:active {
+            transform: scale(0.95);
+        }
+
+        .cell.selected {
+            border-color: #c5a059;
+            background-color: #2c251e;
+            box-shadow: 0 0 10px rgba(197, 160, 89, 0.5);
+        }
+
+        .controls button {
+            background-color: #3a1010;
+            color: #d4c5b9;
+            border: 1px solid #8a1a1a;
+            padding: 10px 20px;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 4px;
+            width: 100%;
+            transition: background 0.2s;
+        }
+
+        .controls button:hover {
+            background-color: #5a1515;
+        }
+
+        /* YOU DIED 画面 */
+        #death-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s ease;
+        }
+
+        #death-screen.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        #death-text {
+            color: #ff0000;
+            font-size: 3rem;
+            letter-spacing: 8px;
+            font-weight: bold;
+            text-shadow: 0 0 20px rgba(255,0,0,0.5);
+            margin-bottom: 20px;
+            transform: scale(0.8);
+            transition: transform 1s ease;
+        }
+        #death-screen.show #death-text {
+            transform: scale(1);
+        }
+
+        #respawn-btn {
+            background: none;
+            border: 1px solid #fff;
+            color: #fff;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>ANIMA MERGE</h1>
+    <div class="subtitle">魂を整え、絶望に挑め</div>
+
+    <div id="game-container">
+        <!-- ボスエリア -->
+        <div class="battle-area">
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem;">
+                <span id="boss-name">薪の王の残滓</span>
+                <span id="boss-hp-text">HP: 100/100</span>
+            </div>
+            <div class="hp-bar-bg"><div id="boss-hp" class="hp-bar"></div></div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-top: 15px;">
+                <span>不条理な騎士（あなた）</span>
+                <span id="player-hp-text">HP: 30/30</span>
+            </div>
+            <div class="hp-bar-bg"><div id="player-hp" class="hp-bar"></div></div>
+        </div>
+
+        <!-- 4x4 パズルグリッド -->
+        <div class="grid" id="grid"></div>
+
+        <!-- アクション -->
+        <div class="controls">
+            <button id="attack-btn">魂を解放して攻撃（全マージ全消費）</button>
+        </div>
+        <div style="font-size: 0.8rem; margin-top: 10px; color: #888;">
+            ※同じランクのソウル（炎）を2つ選ぶと合体！強くなります。<br>
+            ※空きマスをクリックすると、新たなソウルを拾います。
+        </div>
+    </div>
+
+    <!-- 死亡画面 -->
+    <div id="death-screen">
+        <div id="death-text">YOU DIED</div>
+        <button id="respawn-btn" onclick="initGame()">篝火で蘇る</button>
+    </div>
+
+    <script>
+        const GRID_SIZE = 16;
+        // ソウルのランクに応じたエフェクト（見た目）
+        const SOUL_TIERS = {
+            1: '🔥', // 捨てられた亡者のソウル
+            2: '✨', // 名もなき兵士のソウル
+            3: '💠', // 大戦士のソウル
+            4: '🔱', // 英雄のソウル
+            5: '👑'  // 王のソウル
+        };
+        const SOUL_DAMAGE = { 1: 1, 2: 3, 3: 8, 4: 20, 5: 60 };
+
+        // ボス名のバリエーション（フレーバー用）
+        const BOSS_NAMES = [
+            "薪の王の残滓",
+            "深淵の歩行者",
+            "冷たい谷の踊り手",
+            "忌み子の大呪詛",
+            "最初の王の幻影"
+        ];
+
+        let gridData = Array(GRID_SIZE).fill(null);
+        let selectedIndex = null;
+        
+        let bossMaxHp = 100;
+        let bossHp = 100;
+        let playerMaxHp = 30;
+        let playerHp = 30;
+        let bossLevel = 1;
+
+        const gridElement = document.getElementById('grid');
+
+        // グリッドの初期化と描画
+        function renderGrid() {
+            gridElement.innerHTML = '';
+            gridData.forEach((value, index) => {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                if (selectedIndex === index) cell.classList.add('selected');
+                cell.textContent = value ? SOUL_TIERS[value] : '';
+                
+                cell.addEventListener('click', () => handleCellClick(index));
+                gridElement.appendChild(cell);
+            });
+        }
+
+        // セルクリック時の処理（マージ ＆ ソウル生成）
+        function handleCellClick(index) {
+            if (gridData[index] === null) {
+                // 空きマスなら新しいソウル（ランク1）を生成
+                gridData[index] = 1;
+                selectedIndex = null;
+            } else {
+                // ソウルが存在する場合
+                if (selectedIndex === null) {
+                    selectedIndex = index;
+                } else if (selectedIndex === index) {
+                    selectedIndex = null; // 選択解除
+                } else {
+                    // 2つの異なるマスを選択した場合（マージ判定）
+                    if (gridData[selectedIndex] === gridData[index] && gridData[index] < 5) {
+                        gridData[index] += 1; // ランクアップ！
+                        gridData[selectedIndex] = null;
+                        selectedIndex = null;
+                    } else {
+                        // マージできない場合は選択を切り替え
+                        selectedIndex = index;
+                    }
+                }
+            }
+            renderGrid();
+        }
+
+        // 攻撃処理（全ソウルを消費してボスへダメージ、その後ボスからの反撃）
+        document.getElementById('attack-btn').addEventListener('click', () => {
+            let totalDamage = 0;
+            gridData.forEach((tier, index) => {
+                if (tier) {
+                    totalDamage += SOUL_DAMAGE[tier];
+                    gridData[index] = null; // 消費
+                }
+            });
+
+            if (totalDamage === 0) {
+                alert('消費できるソウルがありません！グリッドをクリックしてソウルを集めてください。');
+                return;
+            }
+
+            // プレイヤーの攻撃
+            bossHp -= totalDamage;
+            if (bossHp <= 0) {
+                bossHp = 0;
+                updateHpBars();
+                setTimeout(() => {
+                    bossLevel++;
+                    alert(`強敵を撃破！ 篝火が灯り、次の脅威（Level ${bossLevel}）が迫る…`);
+                    nextBoss();
+                }, 300);
+                return;
+            }
+
+            // ボスの理不尽な反撃（死にゲー要素）
+            let bossDamage = Math.floor(Math.random() * 8) + 5 + (bossLevel * 2);
+            playerHp -= bossDamage;
+            if (playerHp <= 0) {
+                playerHp = 0;
+                updateHpBars();
+                document.getElementById('death-screen').classList.add('show');
+                return;
+            }
+
+            selectedIndex = null;
+            updateHpBars();
+            renderGrid();
+        });
+
+        function updateHpBars() {
+            // ボスHP
+            const bossPct = (bossHp / bossMaxHp) * 100;
+            document.getElementById('boss-hp').style.width = `${bossPct}%`;
+            document.getElementById('boss-hp-text').textContent = `HP: ${bossHp}/${bossMaxHp}`;
+
+            // プレイヤーHP
+            const playerPct = (playerHp / playerMaxHp) * 100;
+            document.getElementById('player-hp').style.width = `${playerPct}%`;
+            document.getElementById('player-hp-text').textContent = `HP: ${playerHp}/${playerMaxHp}`;
+        }
+
+        // 次のボスに進む処理
+        function nextBoss() {
+            bossMaxHp = 100 + (bossLevel - 1) * 50;
+            bossHp = bossMaxHp;
+            playerHp = playerMaxHp;
+
+            const nameIndex = (bossLevel - 1) % BOSS_NAMES.length;
+            document.getElementById('boss-name').textContent = `${BOSS_NAMES[nameIndex]} (Lv.${bossLevel})`;
+
+            gridData = Array(GRID_SIZE).fill(null);
+            selectedIndex = null;
+            
+            updateHpBars();
+            renderGrid();
+        }
+
+        // ゲーム初期化・復活処理
+        function initGame() {
+            bossLevel = 1;
+            bossMaxHp = 100;
+            bossHp = bossMaxHp;
+            playerMaxHp = 30;
+            playerHp = playerMaxHp;
+            
+            gridData = Array(GRID_SIZE).fill(null);
+            selectedIndex = null;
+
+            document.getElementById('boss-name').textContent = `${BOSS_NAMES[0]} (Lv.1)`;
+            document.getElementById('death-screen').classList.remove('show');
+
+            updateHpBars();
+            renderGrid();
+        }
+
+        // ページ読み込み時にゲームを開始
+        initGame();
+    </script>
+</body>
+</html>
